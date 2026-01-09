@@ -1,0 +1,23 @@
+# Core ML
+torch
+torchvision
+torchaudio
+numpy
+scikit-learn
+
+# Computer Vision & Skeletons
+opencv-python
+mediapipe
+
+# Speech to Text (Vosk)
+vosk
+sounddevice
+
+# (Optional) Text to Speech – scalability
+pyttsx3
+
+# Visualization & Analysis
+matplotlib
+
+# Utilities
+tqdm
