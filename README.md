@@ -27,6 +27,15 @@ SIGN2SOUND aims to:
 - Offline processing (no internet required)
 - Converts spoken language into readable text
 
+#### Audio Input Note
+By default, the Speech → Text module captures audio from a microphone device.
+For online meeting transcription (e.g., Zoom, Google Meet), the system can
+capture speaker audio using system-level loopback or monitor devices
+(PipeWire / PulseAudio).
+
+This enables transcription of meeting audio without modifying the core
+speech recognition pipeline.
+
 ### 🟢 Sign → Text (Implemented)
 - Real-time sign language recognition using **skeletal keypoints**
 - Uses **MediaPipe** for landmark extraction
