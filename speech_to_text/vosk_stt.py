@@ -66,7 +66,9 @@ def main():
                 result = json.loads(recognizer.Result())
                 text = result.get("text", "")
                 if text:
-                    print(f"Text: {text}")
+                    #print(f"Text: {text}")
+                    global current_text
+                    current_text = text
 
 if __name__ == "__main__":
     try:
