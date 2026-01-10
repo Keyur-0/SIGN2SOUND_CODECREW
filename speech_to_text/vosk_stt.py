@@ -15,10 +15,11 @@ listening = False
 running = True
 MODEL_PATH = "speech_to_text/models/vosk-model-small-en-us-0.15"  # Path to Vosk model
 SAMPLE_RATE = 48000  # Sample rate for audio recording
-MIC_DEVICE_INDEX = None  # Ryzen HD Audio Controller Stereo Microphone
+MIC_DEVICE_INDEX = None  # use default microphone
 
 #Queue to hold audio data
 audio_queue = queue.Queue()
+
 
 def control_loop():
     global listening, running
