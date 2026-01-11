@@ -26,6 +26,7 @@ SIGN2SOUND aims to:
 - Real-time speech recognition using **Vosk**
 - Offline processing (no internet required)
 - Converts spoken language into readable text
+- Live speech captions are rendered in a real-time OpenCV GUI with start/stop controls.
 
 #### Audio Input Note
 By default, the Speech → Text module captures audio from a microphone device.

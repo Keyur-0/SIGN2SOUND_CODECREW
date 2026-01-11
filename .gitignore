@@ -1,6 +1,7 @@
 # Virtual environment
 venv/
-
+ven311/
+.python-version
 # Vosk speech models
 speech_to_text/models/
 

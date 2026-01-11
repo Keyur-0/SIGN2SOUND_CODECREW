@@ -70,6 +70,7 @@ def main():
                     #print(f"Text: {text}")
                     global current_text
                     current_text = text
+                    print(f"\rText: {text}")
 
 if __name__ == "__main__":
     try:
