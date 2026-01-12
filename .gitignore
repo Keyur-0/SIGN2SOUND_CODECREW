@@ -11,3 +11,5 @@ __pycache__/
 
 # OS files
 .DS_Store
+# Ignore raw datasets
+data/raw/
