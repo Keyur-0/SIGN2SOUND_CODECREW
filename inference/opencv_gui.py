@@ -20,6 +20,12 @@ DEBUG_LANDMARKS = False
 SEQUENCE_LENGTH = 30   # frames per sequence
 sequence_buffer = []  # rolling buffer of landmark vectors
 
+#DATA RECORDING VARIABLES
+RECORDING = False # recording flag
+current_label = None # label for current recording
+recorded_sequences = []  # list of (label, sequence)
+
+
 #vosk STT VARIABLES
 listening = False
 running = True
@@ -40,7 +46,9 @@ def audio_callback(indata, frames, time_info, status):
     audio_queue.put(bytes(indata))
 
 def main():
-    global running, current_text, listening, DEBUG_LANDMARKS
+    global running, current_text, listening, DEBUG_LANDMARKS, RECORDING, current_label
+
+    #Load Vosk model
     print("Loading Vosk model...")
     model = Model(MODEL_PATH)
     recognizer = KaldiRecognizer(model, SAMPLE_RATE)
@@ -97,6 +105,11 @@ def main():
                 if len(sequence_buffer) == SEQUENCE_LENGTH:
                     sequence = np.stack(sequence_buffer)  # shape: (30, 63)
 
+                    if RECORDING:
+                        recorded_sequences.append((current_label, sequence))
+                        print(f"[RECORDED] Label: {current_label}, Shape: {sequence.shape}")
+                        RECORDING = False  # stop after one capture
+
                     if DEBUG_LANDMARKS:
                         print("Sequence shape:", sequence.shape)
 
@@ -143,6 +156,15 @@ def main():
         elif key == ord('l'):
             DEBUG_LANDMARKS = not DEBUG_LANDMARKS
             print(f"[DEBUG] Landmark logging: {DEBUG_LANDMARKS}")
+        elif key == ord('r'):
+            RECORDING = True
+            current_label = "test_gesture"  # placeholder for now
+            sequence_buffer.clear()
+            print("[RECORD] Started recording")
+        elif key == ord('t'):
+            RECORDING = False
+            print("[RECORD] Stopped recording")
+
 
             
         #Speech to text processing
