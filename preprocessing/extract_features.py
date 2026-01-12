@@ -12,17 +12,22 @@ def load_sample(sample_dir: Path):
     Loads one sample directory (e.g. A/0/)
     Returns: (30, 63) numpy array
     """
-    frame_files = sorted(sample_dir.glob("*.npy"))
+    frame_files = sorted(
+        sample_dir.glob("*.npy"),
+        key=lambda x: int(x.stem)
+    )
 
     frames = []
     for f in frame_files:
-        frame = np.load(f)          # (126,)
-        frame = frame[:63]           # take one hand
+        frame = np.load(f)[:FEATURES_PER_FRAME]  # (63,)
         frames.append(frame)
 
-    frames = np.array(frames)        # (29, 63)
+    if len(frames) == 0:
+        raise ValueError(f"No frames found in {sample_dir}")
 
-    # Pad last frame if needed
+    frames = np.array(frames, dtype=np.float32)
+
+    # Pad to 30 frames if needed
     if frames.shape[0] < SEQUENCE_LENGTH:
         pad_count = SEQUENCE_LENGTH - frames.shape[0]
         pad_frames = np.repeat(frames[-1][None, :], pad_count, axis=0)
@@ -34,27 +39,28 @@ def load_sample(sample_dir: Path):
 def load_dataset():
     X = []
     y = []
+    labels = []
 
     for label_dir in sorted(DATA_ROOT.iterdir()):
         if not label_dir.is_dir():
             continue
 
-        label = label_dir.name  # A, B, C, ...
+        label = label_dir.name
+        labels.append(label)
 
-        for sample_dir in label_dir.iterdir():
+        for sample_dir in sorted(label_dir.iterdir()):
             if not sample_dir.is_dir():
                 continue
 
-            sequence = load_sample(sample_dir)
-            X.append(sequence)
+            X.append(load_sample(sample_dir))
             y.append(label)
 
-    return np.array(X), np.array(y)
+    return np.array(X), np.array(y), labels
 
 
 if __name__ == "__main__":
-    X, y = load_dataset()
+    X, y, labels = load_dataset()
     print("X shape:", X.shape)
     print("y shape:", y.shape)
-    print("Example label:", y[0])
-    print("Example sequence:", X[0])
+    print("Labels:", labels[:5])
+    print("One sample shape:", X[0].shape)
