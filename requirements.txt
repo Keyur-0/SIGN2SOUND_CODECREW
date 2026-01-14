@@ -1,19 +1,17 @@
 # Core ML
-torch
-torchvision
-torchaudio
+torch>=2.0
 numpy
 scikit-learn
 
 # Computer Vision & Skeletons
 opencv-python
-mediapipe
+mediapipe==0.10.9
 
-# Speech to Text (Vosk)
+# Speech to Text (Offline)
 vosk
 sounddevice
 
-# (Optional) Text to Speech – scalability
+# Optional: Text to Speech (Scalability)
 pyttsx3
 
 # Visualization & Analysis
