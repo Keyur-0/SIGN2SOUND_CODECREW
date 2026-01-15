@@ -89,7 +89,7 @@ def main():
         ret, cam_frame = cam.read()
         if not ret:
             continue
-
+        status_text = "Waiting..."
         cam_frame = cv2.resize(cam_frame, (320, 240))
         cam_frame = cv2.flip(cam_frame, 1)
 
@@ -110,14 +110,19 @@ def main():
                 if len(sequence_buffer) > SEQUENCE_LENGTH:
                     sequence_buffer.pop(0)
 
-                if len(sequence_buffer) == SEQUENCE_LENGTH:
+                if len(sequence_buffer) < SEQUENCE_LENGTH:
+                    status_text = "Collecting..."
+
+                
+                elif len(sequence_buffer) == SEQUENCE_LENGTH:
                     sequence = np.stack(sequence_buffer)
                     current_sign = predict_sign(sequence, sign_model)
-
+                    status_text = f"Predicting: {current_sign}"
                     if RECORDING:
                         recorded_sequences.append((current_label, sequence))
                         print(f"[RECORDED] Label: {current_label}, Shape: {sequence.shape}")
                         RECORDING = False
+                
 
                 if DEBUG_LANDMARKS:
                     print("Landmark vector shape:", landmark_vector.shape)
@@ -129,22 +134,69 @@ def main():
                 )
 
         # ---------------- GUI ----------------
-        frame = np.ones((400, 700, 3), dtype=np.uint8) * 255
-        frame[140:380, 380:700] = cam_frame
+        # ---------------- GUI ----------------
+        FRAME_W, FRAME_H = 720, 420
+        frame = np.ones((FRAME_H, FRAME_W, 3), dtype=np.uint8) * 245
 
-        cv2.putText(frame, "SIGN2SOUND - Live Speech Captioning",
-                    (40, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 0), 2)
 
-        cv2.putText(frame, "S: Start | E: Stop | Q: Quit | L: Toggle Landmarks",
-                    (40, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (50, 50, 50), 1)
+        # Webcam placement (RIGHT SIDE)
+        CAM_W, CAM_H = 280, 210
+        CAM_X, CAM_Y = 400, 140
 
-        cv2.putText(frame, current_text,
-                    (40, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (20, 20, 20), 2)
+        cam_frame = cv2.resize(cam_frame, (CAM_W, CAM_H))
+        frame[CAM_Y:CAM_Y+CAM_H, CAM_X:CAM_X+CAM_W] = cam_frame
 
-        cv2.putText(frame, f"Sign: {current_sign}",
-                    (40, 200), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
+        # Webcam border
+        cv2.rectangle(
+            frame,
+            (CAM_X-2, CAM_Y-2),
+            (CAM_X+CAM_W+2, CAM_Y+CAM_H+2),
+            (0, 0, 0),
+            2
+        )
+
+        TITLE_FONT = 1.1
+        LABEL_FONT = 0.75
+        VALUE_FONT = 0.9
+        STATUS_FONT = 0.8
+
+        # Title
+        cv2.putText(frame, "SIGN2SOUND",
+                    (40, 45),
+                    cv2.FONT_HERSHEY_SIMPLEX, TITLE_FONT, (0,0,0), 2)
+
+        # Sign
+        cv2.putText(frame, "SIGN:",
+                    (40, 110),
+                    cv2.FONT_HERSHEY_SIMPLEX, LABEL_FONT, (0,0,0), 2)
+
+        cv2.putText(frame, current_sign,
+                    (150, 110),
+                    cv2.FONT_HERSHEY_SIMPLEX, VALUE_FONT, (0,0,255), 2)
+
+        # Speech (truncate to avoid overflow)
+        MAX_CHARS = 32
+        speech_display = current_text[:MAX_CHARS]
+
+        cv2.putText(frame, 'Speech:',
+                    (40, 170),
+                    cv2.FONT_HERSHEY_SIMPLEX, LABEL_FONT, (0,0,0), 2)
+
+        cv2.putText(frame, f'"{speech_display}"',
+                    (40, 205),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (30,30,30), 2)
+
+        # Status
+        cv2.putText(frame, "Status:",
+                    (40, 265),
+                    cv2.FONT_HERSHEY_SIMPLEX, LABEL_FONT, (0,0,0), 2)
+
+        cv2.putText(frame, status_text,
+                    (150, 265),
+                    cv2.FONT_HERSHEY_SIMPLEX, STATUS_FONT, (0,150,0), 2)
 
         cv2.imshow(WINDOW_NAME, frame)
+
 
         key = cv2.waitKey(1) & 0xFF
         if key == ord("q"):
