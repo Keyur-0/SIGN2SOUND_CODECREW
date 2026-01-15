@@ -7,8 +7,10 @@ import json
 import queue
 import sys
 
-import sounddevice as sd
-from vosk import KaldiRecognizer, Model
+# import sounddevice as sd
+# from vosk import KaldiRecognizer, Model
+from speech_to_text.vosk_stt import VoskSTT
+
 from inference.infer import load_model, predict_sign
 from collections import deque, Counter
 
@@ -58,14 +60,20 @@ def main():
     global DEBUG_LANDMARKS, RECORDING, current_label
     global sequence_buffer, recorded_sequences, current_sign
     global stable_sign, live_sign
+    stt = VoskSTT(
+    model_path=MODEL_PATH,
+    sample_rate=SAMPLE_RATE,
+    device=MIC_DEVICE_INDEX
+    )
+    stt.start()
 
     # Load sign model
     sign_model = load_model()
 
     # Load Vosk model
     print("Loading Vosk model...")
-    model = Model(MODEL_PATH)
-    recognizer = KaldiRecognizer(model, SAMPLE_RATE)
+    # model = Model(MODEL_PATH)
+    # recognizer = KaldiRecognizer(model, SAMPLE_RATE)
 
     # Open webcam
     print("Opening webcam...")
@@ -82,16 +90,16 @@ def main():
     )
 
     # Start audio stream
-    print("Starting audio stream...")
-    stream = sd.RawInputStream(
-        samplerate=SAMPLE_RATE,
-        blocksize=8000,
-        device=MIC_DEVICE_INDEX,
-        dtype="int16",
-        channels=1,
-        callback=audio_callback
-    )
-    stream.start()
+    # print("Starting audio stream...")
+    # stream = sd.RawInputStream(
+    #     samplerate=SAMPLE_RATE,
+    #     blocksize=8000,
+    #     device=MIC_DEVICE_INDEX,
+    #     dtype="int16",
+    #     channels=1,
+    #     callback=audio_callback
+    # # )
+    # stream.start()
 
     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
 
@@ -249,8 +257,16 @@ def main():
             running = False
         elif key == ord("s"):
             listening = True
+            stt.set_listening(True)
+
         elif key == ord("e"):
             listening = False
+            stt.set_listening(False)
+
+        # elif key == ord("s"):
+        #     listening = True
+        # elif key == ord("e"):
+        #     listening = False
         elif key == ord("l"):
             DEBUG_LANDMARKS = not DEBUG_LANDMARKS
         elif key == ord("r"):
@@ -260,16 +276,19 @@ def main():
         elif key == ord("t"):
             RECORDING = False
 
-        if listening and not audio_queue.empty():
-            data = audio_queue.get()
-            if recognizer.AcceptWaveform(data):
-                result = json.loads(recognizer.Result())
-                text = result.get("text", "")
-                if text:
-                    current_text = text
+        # if listening and not audio_queue.empty():
+        #     data = audio_queue.get()
+        #     if recognizer.AcceptWaveform(data):
+        #         result = json.loads(recognizer.Result())
+        #         text = result.get("text", "")
+        #         if text:
+        #             current_text = text
+        if listening:
+            current_text = stt.get_text()
 
-    stream.stop()
-    stream.close()
+    stt.stop()
+    # stream.stop()
+    # stream.close()
     cam.release()
     cv2.destroyAllWindows()
 
