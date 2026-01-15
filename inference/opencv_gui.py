@@ -10,12 +10,21 @@ import sys
 import sounddevice as sd
 from vosk import KaldiRecognizer, Model
 from inference.infer import load_model, predict_sign
+from collections import deque, Counter
 
 # GLOBAL VARIABLES
 current_sign = ""
 
 # DEBUG VARIABLES
 DEBUG_LANDMARKS = False
+
+# PREDICTION SMOOTHING VARIABLES
+SMOOTHING_WINDOW = 7
+prediction_buffer = deque(maxlen=SMOOTHING_WINDOW)
+
+live_sign = ""
+stable_sign = ""
+
 
 # MEDIAPIPE VARIABLES FOR LSTMS
 SEQUENCE_LENGTH = 30
@@ -48,6 +57,7 @@ def main():
     global running, current_text, listening
     global DEBUG_LANDMARKS, RECORDING, current_label
     global sequence_buffer, recorded_sequences, current_sign
+    global stable_sign, live_sign
 
     # Load sign model
     sign_model = load_model()
@@ -112,12 +122,35 @@ def main():
 
                 if len(sequence_buffer) < SEQUENCE_LENGTH:
                     status_text = "Collecting..."
+                    stable_sign = ""
+                    prediction_buffer.clear()
 
                 
-                elif len(sequence_buffer) == SEQUENCE_LENGTH:
+                # elif len(sequence_buffer) == SEQUENCE_LENGTH:
+                #     sequence = np.stack(sequence_buffer)
+                #     current_sign = predict_sign(sequence, sign_model)
+                #     status_text = f"Predicting: {current_sign}"
+                    # if RECORDING:
+                    #     recorded_sequences.append((current_label, sequence))
+                    #     print(f"[RECORDED] Label: {current_label}, Shape: {sequence.shape}")
+                    #     RECORDING = False
+                if len(sequence_buffer) == SEQUENCE_LENGTH:
                     sequence = np.stack(sequence_buffer)
-                    current_sign = predict_sign(sequence, sign_model)
-                    status_text = f"Predicting: {current_sign}"
+
+                    # Live prediction
+                    live_sign = predict_sign(sequence, sign_model)
+                    prediction_buffer.append(live_sign)
+
+                    # Check stability
+                    most_common, count = Counter(prediction_buffer).most_common(1)[0]
+
+                    if count >= 5:   # 5 out of 7
+                        stable_sign = most_common
+                        #status_text = "Sign Stable ✓"
+                        status_text = "Sign Stable"
+                    else:
+                        status_text = "Predicting..."
+
                     if RECORDING:
                         recorded_sequences.append((current_label, sequence))
                         print(f"[RECORDED] Label: {current_label}, Shape: {sequence.shape}")
@@ -132,6 +165,12 @@ def main():
                     hand_landmarks,
                     mp_hands.HAND_CONNECTIONS
                 )
+        if not results.multi_hand_landmarks:
+            sequence_buffer.clear()
+            prediction_buffer.clear()
+            live_sign = ""
+            stable_sign = ""
+            status_text = "Waiting..."
 
         # ---------------- GUI ----------------
         # ---------------- GUI ----------------
@@ -170,9 +209,9 @@ def main():
                     (40, 110),
                     cv2.FONT_HERSHEY_SIMPLEX, LABEL_FONT, (0,0,0), 2)
 
-        cv2.putText(frame, current_sign,
-                    (150, 110),
-                    cv2.FONT_HERSHEY_SIMPLEX, VALUE_FONT, (0,0,255), 2)
+        # cv2.putText(frame, current_sign,
+        #             (150, 110),
+        #             cv2.FONT_HERSHEY_SIMPLEX, VALUE_FONT, (0,0,255), 2)
 
         # Speech (truncate to avoid overflow)
         MAX_CHARS = 32
@@ -194,6 +233,13 @@ def main():
         cv2.putText(frame, status_text,
                     (150, 265),
                     cv2.FONT_HERSHEY_SIMPLEX, STATUS_FONT, (0,150,0), 2)
+        cv2.putText(frame, stable_sign if stable_sign else "-",
+                    (150, 110),
+                    cv2.FONT_HERSHEY_SIMPLEX, VALUE_FONT, (0,0,255), 2)
+
+        cv2.putText(frame, f"Predicting: {live_sign}",
+                    (40, 135),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.65, (80,80,80), 2)
 
         cv2.imshow(WINDOW_NAME, frame)
 
