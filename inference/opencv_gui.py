@@ -70,11 +70,6 @@ def main():
     # Load sign model
     sign_model = load_model()
 
-    # Load Vosk model
-    print("Loading Vosk model...")
-    # model = Model(MODEL_PATH)
-    # recognizer = KaldiRecognizer(model, SAMPLE_RATE)
-
     # Open webcam
     print("Opening webcam...")
     cam = cv2.VideoCapture(0)
@@ -88,18 +83,6 @@ def main():
         min_detection_confidence=0.5,
         min_tracking_confidence=0.5
     )
-
-    # Start audio stream
-    # print("Starting audio stream...")
-    # stream = sd.RawInputStream(
-    #     samplerate=SAMPLE_RATE,
-    #     blocksize=8000,
-    #     device=MIC_DEVICE_INDEX,
-    #     dtype="int16",
-    #     channels=1,
-    #     callback=audio_callback
-    # # )
-    # stream.start()
 
     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
 
@@ -133,15 +116,6 @@ def main():
                     stable_sign = ""
                     prediction_buffer.clear()
 
-                
-                # elif len(sequence_buffer) == SEQUENCE_LENGTH:
-                #     sequence = np.stack(sequence_buffer)
-                #     current_sign = predict_sign(sequence, sign_model)
-                #     status_text = f"Predicting: {current_sign}"
-                    # if RECORDING:
-                    #     recorded_sequences.append((current_label, sequence))
-                    #     print(f"[RECORDED] Label: {current_label}, Shape: {sequence.shape}")
-                    #     RECORDING = False
                 if len(sequence_buffer) == SEQUENCE_LENGTH:
                     sequence = np.stack(sequence_buffer)
 
@@ -154,7 +128,6 @@ def main():
 
                     if count >= 5:   # 5 out of 7
                         stable_sign = most_common
-                        #status_text = "Sign Stable ✓"
                         status_text = "Sign Stable"
                     else:
                         status_text = "Predicting..."
@@ -180,7 +153,6 @@ def main():
             stable_sign = ""
             status_text = "Waiting..."
 
-        # ---------------- GUI ----------------
         # ---------------- GUI ----------------
         FRAME_W, FRAME_H = 720, 420
         frame = np.ones((FRAME_H, FRAME_W, 3), dtype=np.uint8) * 245
@@ -255,6 +227,7 @@ def main():
         key = cv2.waitKey(1) & 0xFF
         if key == ord("q"):
             running = False
+            break
         elif key == ord("s"):
             listening = True
             stt.set_listening(True)

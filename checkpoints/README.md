@@ -1,7 +1,14 @@
-# Model Checkpoints
+## Model Checkpoints
 
-This directory is used to store trained model weights generated during
-the training phase of the SIGN2SOUND project.
+- **best_model.pth**
+  - Model with highest validation accuracy during training
+
+- **final_model.pth**
+  - Final selected model used for evaluation and demo
+  - Referenced in `evaluate.py` and inference scripts
+
+- **sign_lstm.pth**
+  - Intermediate training checkpoint (kept for reproducibility)
 
 ---
 

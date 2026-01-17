@@ -2,10 +2,8 @@ import torch
 import numpy as np
 from models.model import SignLSTM
 
-# -------------------------------
 # Configuration
-# -------------------------------
-MODEL_PATH = "checkpoints/sign_lstm.pth"
+MODEL_PATH = "checkpoints/final_model.pth"
 
 SEQUENCE_LENGTH = 30
 FEATURES_PER_FRAME = 63
@@ -20,9 +18,7 @@ IDX_TO_CLASS = [
 
 NUM_CLASSES = len(IDX_TO_CLASS)
 
-# -------------------------------
 # Load model
-# -------------------------------
 def load_model():
     """
     Loads the trained LSTM sign model.
@@ -39,9 +35,8 @@ def load_model():
     model.eval()
     return model
 
-# -------------------------------
+
 # Inference
-# -------------------------------
 def predict_sign(sequence: np.ndarray, model):
     """
     sequence: numpy array of shape (30, 63)
@@ -60,9 +55,7 @@ def predict_sign(sequence: np.ndarray, model):
 
     return IDX_TO_CLASS[pred_idx]
 
-# -------------------------------
 # Test
-# -------------------------------
 if __name__ == "__main__":
     print("[INFO] Loading model...")
     model = load_model()
