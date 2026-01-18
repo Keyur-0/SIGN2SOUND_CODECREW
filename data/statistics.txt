@@ -1,0 +1,27 @@
+SIGN2SOUND Dataset Statistics
+
+Dataset Name:
+Indian Sign Language Skeletal-point Dataset (MediaPipe)
+
+Feature Type:
+Hand landmarks (x, y, z)
+
+Features per frame:
+63
+
+Sequence length:
+30 frames
+
+Total samples:
+3000 sequences
+
+Number of classes:
+25 (Alphabet-level signs, excluding R)
+
+Train / Validation Split:
+- Training: 80%
+- Validation: 20%
+
+Notes:
+Dataset statistics may vary depending on preprocessing and filtering steps.
+The split is randomized with a fixed seed to ensure reproducibility.
