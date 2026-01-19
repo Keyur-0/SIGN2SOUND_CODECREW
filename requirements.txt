@@ -2,6 +2,7 @@
 torch>=2.0
 numpy
 scikit-learn
+pandas
 
 # Computer Vision & Skeletons
 opencv-python

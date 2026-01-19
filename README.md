@@ -40,7 +40,7 @@ speech recognition pipeline.
 ### 🟢 Sign → Text (Implemented)
 - Real-time sign language recognition using **skeletal keypoints**
 - Uses **MediaPipe** for landmark extraction
-- Deep learning model (PyTorch LSTM/Bi-LSTM)
+- Deep learning model (PyTorch LSTM-based sequence model)
 - Converts signs into text output
 
 ### 🔵 Sign → Speech (Scalable / Optional)
@@ -51,7 +51,7 @@ speech recognition pipeline.
 ---
 
 ## 🧠 System Architecture
-```bash
+```
 
                     ┌────────────┐
 Speech User ──Mic──▶│   VOSK     │──▶ Text Output
@@ -81,19 +81,93 @@ This project uses an **IEEE DataPort dataset** as required by the challenge:
 ---
 
 ## 🏗️ Project Structure (Simplified)
-```bash
+```
 SIGN2SOUND_CodeCrew/
-├── data/ # Dataset documentation (IEEE compliant)
-├── preprocessing/ # Data preprocessing pipeline
-├── features/ # MediaPipe landmark extraction
-├── models/ # PyTorch model architecture
-├── training/ # Training & evaluation scripts
-├── inference/ # Real-time inference & demo
-├── results/ # Metrics, graphs, outputs
-├── checkpoints/ # Trained model weights
-├── docs/ # Diagrams & technical report
-├── README.md
-└── requirements.txt
+│
+├── checkpoints/                     # Trained model weights
+│   ├── best_model.pth
+│   ├── final_model.pth
+│   └── README.md
+│
+├── data/                            # Dataset documentation (IEEE compliant)
+│   ├── README.md
+│   └── statistics.txt
+│
+├── preprocessing/                   # Data preprocessing pipeline
+│   ├── preprocess.py
+│   ├── extract_features.py
+│   ├── augmentation.py
+│   └── README.md
+│
+├── features/                        # Feature extraction modules
+│   ├── hand_landmarks.py
+│   ├── pose_estimation.py
+│   ├── facial_features.py
+│   ├── feature_utils.py
+│   └── README.md
+│
+├── models/                          # Model architecture definitions
+│   ├── model.py
+│   ├── custom_layers.py
+│   ├── loss.py
+│   └── README.md
+│
+├── training/                        # Training & evaluation pipeline
+│   ├── train.py
+│   ├── evaluate.py
+│   ├── dataset.py
+│   ├── label_utils.py
+│   ├── callbacks.py
+│   ├── hyperparams.yaml
+│   └── README.md
+│
+├── inference/                       # Real-time inference & demo
+│   ├── infer.py
+│   ├── opencv_gui.py                # Main Phase-2 demo
+│   ├── realtime_demo.py
+│   ├── tts.py
+│   ├── utils.py
+│   └── README.md
+│
+├── speech_to_text/                  # Offline Speech → Text module
+│   ├── vosk_stt.py
+│   ├── models/                      # Vosk language models
+│   └── __pycache__/
+│
+├── notebooks/                       # Experiments & analysis
+│   ├── 01_data_exploration.ipynb
+│   ├── 02_model_experiment.ipynb
+│   ├── 03_results_visualization.ipynb
+│   └── README.md
+│
+├── results/                         # Evaluation outputs
+│   ├── accuracy_curves.png
+│   ├── loss_curves.png
+│   ├── confusion_matrix.png
+│   ├── metrics.json
+│   ├── per_class_performance.csv
+│   ├── training_log.txt
+│   ├── plot_curves.py
+│   └── sample_outputs/
+│       ├── sample_1.png
+│       ├── sample_2.png
+│       └── predictions.txt
+│
+├── docs/                            # Documentation & reports
+│   ├── architecture_diagram.png
+│   ├── system_pipeline.png
+│   ├── dataset_preprocessing.md
+│   ├── training_details.md
+│   └── technical_report.pdf
+│
+├── tests/                           # Unit tests
+│   ├── test_inference.py
+│   └── test_model.py
+│
+├── README.md                        # Main project documentation
+├── requirements.txt                # Dependencies
+├── LICENSE
+└── .gitignore
 ```
 ---
 
@@ -101,8 +175,8 @@ SIGN2SOUND_CodeCrew/
 
 ### 1️⃣ Environment Setup
 ```bash
-python -m venv venv
-source venv/bin/activate
+python -m venv venv311
+source venv311/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -113,7 +187,41 @@ python speech_to_text/vosk_stt.py
 
 ### 3️⃣ Run Sign → Text (Webcam Demo)
 ```bash
-python inference/realtime_demo.py
+python -m inference.opencv_gui
+```
+
+## 🎥 Demo
+
+A real-time multimodal demo is provided showcasing both **Sign → Text** and **Speech → Text** capabilities of the SIGN2SOUND system through a unified OpenCV-based interface.
+
+### The demo demonstrates:
+
+* **Live webcam capture**
+* **Hand landmark extraction** using MediaPipe
+* **Real-time Sign → Text recognition** using an LSTM-based model
+* **Temporal prediction smoothing** to stabilize sign outputs
+* **Offline Speech → Text transcription** using Vosk
+* **Live visual feedback** including:
+
+  * Current sign prediction
+  * Stable sign output
+  * Speech transcription
+  * System status indicators
+
+The Sign → Text and Speech → Text pipelines operate independently but are visualized together to demonstrate **bidirectional accessibility**.
+
+### Running the demo:
+
+```bash
+python -m inference.opencv_gui
+```
+
+### Sample Outputs:
+
+Screenshots and example predictions from the demo are available in:
+
+```bash
+results/sample_outputs/
 ```
 
 ---
@@ -162,7 +270,7 @@ python inference/realtime_demo.py
 ---
 
 ## 📜 License
-This project is released under the MIT License (or applicable license).
+This project is released under the MIT License.
 
 ---
 
