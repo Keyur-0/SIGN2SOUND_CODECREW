@@ -1,15 +1,18 @@
 import numpy as np
-from inference.infer import predict_sign
+from inference.infer import load_model, predict_sign
 
-class DummyModel:
-    def __call__(self, x):
-        import torch
-        return torch.randn(1, 25)
+def test_inference_pipeline():
+    model = load_model()
 
-def test_predict_sign():
-    dummy_model = DummyModel()
-    sequence = np.random.rand(30, 63).astype("float32")
+    # Dummy landmark sequence: (30 frames × 63 features)
+    dummy_sequence = np.random.rand(30, 63).astype("float32")
 
-    label = predict_sign(sequence, dummy_model)
+    prediction = predict_sign(dummy_sequence, model)
 
-    assert isinstance(label, str)
+    assert prediction is not None, "Prediction returned None"
+    assert isinstance(prediction, str), "Prediction should be a class label (string)"
+
+    print("✅ Inference pipeline test passed.")
+
+if __name__ == "__main__":
+    test_inference_pipeline()

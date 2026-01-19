@@ -241,6 +241,19 @@ results/sample_outputs/
 ```
 
 ---
+## 🧪 Testing
+
+Basic unit tests are provided to verify model forward passes and inference
+utilities. These tests are lightweight and designed to ensure functional
+correctness without requiring external hardware or datasets.
+
+Run tests using:
+```bash
+python -m tests.test_model
+python -m tests.test_inference
+```
+
+---
 
 ## 📄 Documentation
 
