@@ -1,4 +1,3 @@
-# TODO: Test if the OpenCV GUI integration with Vosk STT works as intended
 import mediapipe as mp
 import cv2
 import numpy as np
@@ -7,8 +6,6 @@ import json
 import queue
 import sys
 
-# import sounddevice as sd
-# from vosk import KaldiRecognizer, Model
 from speech_to_text.vosk_stt import VoskSTT
 
 from inference.infer import load_model, predict_sign
@@ -26,7 +23,6 @@ prediction_buffer = deque(maxlen=SMOOTHING_WINDOW)
 
 live_sign = ""
 stable_sign = ""
-
 
 # MEDIAPIPE VARIABLES FOR LSTMS
 SEQUENCE_LENGTH = 30
@@ -189,10 +185,6 @@ def main():
                     (40, 110),
                     cv2.FONT_HERSHEY_SIMPLEX, LABEL_FONT, (0,0,0), 2)
 
-        # cv2.putText(frame, current_sign,
-        #             (150, 110),
-        #             cv2.FONT_HERSHEY_SIMPLEX, VALUE_FONT, (0,0,255), 2)
-
         # Speech (truncate to avoid overflow)
         MAX_CHARS = 32
         speech_display = current_text[:MAX_CHARS]
@@ -220,6 +212,62 @@ def main():
         cv2.putText(frame, f"Predicting: {live_sign}",
                     (40, 135),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.65, (80,80,80), 2)
+        
+        # ---------- CONTROLS (BOTTOM LEFT) ----------
+        CTRL_X = 20
+        CTRL_Y = frame.shape[0] - 120   # distance from bottom
+
+        CTRL_TITLE_FONT = 0.6
+        CTRL_TEXT_FONT = 0.5
+        CTRL_COLOR_TITLE = (0, 0, 0)
+        CTRL_COLOR_TEXT = (60, 60, 60)
+        THICKNESS = 2
+
+        cv2.putText(
+            frame, "Controls:",
+            (CTRL_X, CTRL_Y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            CTRL_TITLE_FONT,
+            CTRL_COLOR_TITLE,
+            THICKNESS
+        )
+
+        cv2.putText(
+            frame, "Speech → Text :  S = Start   E = Stop",
+            (CTRL_X, CTRL_Y + 22),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            CTRL_TEXT_FONT,
+            CTRL_COLOR_TEXT,
+            THICKNESS
+        )
+
+        cv2.putText(
+            frame, "Record Sign :  R = Record",
+            (CTRL_X, CTRL_Y + 44),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            CTRL_TEXT_FONT,
+            CTRL_COLOR_TEXT,
+            THICKNESS
+        )
+
+        cv2.putText(
+            frame, "Landmarks :  L",
+            (CTRL_X, CTRL_Y + 66),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            CTRL_TEXT_FONT,
+            CTRL_COLOR_TEXT,
+            THICKNESS
+        )
+
+        cv2.putText(
+            frame, "Quit :  Q",
+            (CTRL_X, CTRL_Y + 88),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            CTRL_TEXT_FONT,
+            CTRL_COLOR_TEXT,
+            THICKNESS
+        )
+
 
         cv2.imshow(WINDOW_NAME, frame)
 
@@ -231,15 +279,9 @@ def main():
         elif key == ord("s"):
             listening = True
             stt.set_listening(True)
-
         elif key == ord("e"):
             listening = False
             stt.set_listening(False)
-
-        # elif key == ord("s"):
-        #     listening = True
-        # elif key == ord("e"):
-        #     listening = False
         elif key == ord("l"):
             DEBUG_LANDMARKS = not DEBUG_LANDMARKS
         elif key == ord("r"):
@@ -248,20 +290,11 @@ def main():
             sequence_buffer.clear()
         elif key == ord("t"):
             RECORDING = False
-
-        # if listening and not audio_queue.empty():
-        #     data = audio_queue.get()
-        #     if recognizer.AcceptWaveform(data):
-        #         result = json.loads(recognizer.Result())
-        #         text = result.get("text", "")
-        #         if text:
-        #             current_text = text
+        # Update current text from STT
         if listening:
             current_text = stt.get_text()
 
     stt.stop()
-    # stream.stop()
-    # stream.close()
     cam.release()
     cv2.destroyAllWindows()
 
