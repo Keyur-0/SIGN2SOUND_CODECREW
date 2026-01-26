@@ -233,7 +233,7 @@ def main():
         )
 
         cv2.putText(
-            frame, "Speech → Text :  S = Start   E = Stop",
+            frame, "Speech to Text :  S = Start   E = Stop",
             (CTRL_X, CTRL_Y + 22),
             cv2.FONT_HERSHEY_SIMPLEX,
             CTRL_TEXT_FONT,
