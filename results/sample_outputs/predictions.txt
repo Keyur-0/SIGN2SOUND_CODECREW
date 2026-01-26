@@ -2,25 +2,25 @@ Sample Predictions – SIGN2SOUND Phase 2 Demo
 
 Sample 1 (sample_1.png)
 -----------------------
-True Sign       : Z
-Predicted Sign  : Z
+True Sign       : G
+Predicted Sign  : G
 Status          : Sign Stable (after temporal smoothing)
 Result          : Correct
 
 Description:
-The user performs the sign for the letter 'Z'. The system initially shows
+The user performs the sign for the letter 'G'. The system initially shows
 live predictions and confirms the final output once the prediction becomes
 stable after temporal smoothing.
 
 
 Sample 2 (sample_2.png)
 -----------------------
-True Sign       : Y
-Predicted Sign  : Y
+True Sign       : Z
+Predicted Sign  : Z
 Status          : Sign Stable (after temporal smoothing)
 Result          : Correct
 
 Description:
-The user performs the sign for the letter 'Y'. During live inference, the
+The user performs the sign for the letter 'Z'. During live inference, the
 model briefly fluctuates between nearby classes before converging to the
 correct sign using prediction smoothing.
