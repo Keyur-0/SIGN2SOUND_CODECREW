@@ -3,10 +3,11 @@ import numpy as np
 from models.model import SignLSTM
 
 # Configuration
-MODEL_PATH = "checkpoints/final_model.pth"
+# MODEL_PATH = "checkpoints/final_model.pth"
+MODEL_PATH = "checkpoints/best_model_2hand.pth"
 
 SEQUENCE_LENGTH = 30
-FEATURES_PER_FRAME = 63
+FEATURES_PER_FRAME = 126
 DEVICE = torch.device("cpu")
 
 # Dataset has 25 letters (R missing)
@@ -39,12 +40,12 @@ def load_model():
 # Inference
 def predict_sign(sequence: np.ndarray, model):
     """
-    sequence: numpy array of shape (30, 63)
+    sequence: numpy array of shape (30, 126)
     returns: predicted sign label (string)
     """
     if sequence.shape != (SEQUENCE_LENGTH, FEATURES_PER_FRAME):
         raise ValueError(
-            f"Expected shape (30,63), got {sequence.shape}"
+            f"Expected shape (30,126), got {sequence.shape}"
         )
 
     x = torch.tensor(sequence, dtype=torch.float32).unsqueeze(0)
@@ -60,6 +61,6 @@ if __name__ == "__main__":
     print("[INFO] Loading model...")
     model = load_model()
 
-    dummy_sequence = np.random.rand(30, 63).astype(np.float32)
+    dummy_sequence = np.random.rand(30, 126).astype(np.float32)
     prediction = predict_sign(dummy_sequence, model)
     print("Predicted sign:", prediction)
