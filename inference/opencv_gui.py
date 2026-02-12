@@ -13,7 +13,8 @@ WINDOW_NAME = "SIGN2SOUND"
 SEQUENCE_LENGTH = 30
 
 # Temporal stability
-LOCK_THRESHOLD = 8        # frames to lock sign
+# LOCK_THRESHOLD = 8  
+LOCK_THRESHOLD = 10       # frames to lock sign
 UNLOCK_THRESHOLD = 5     # frames with no hand to reset
 
 # VOSK STT
@@ -62,7 +63,11 @@ def main():
     )
     stt.start()
     
-    COOLDOWN_FRAMES = 12   # ~0.4 sec at 30 FPS
+    COOLDOWN_FRAMES = 12
+    cooldown_count = 0
+
+    MIN_HOLD_FRAMES = 6      # must hold same sign this many frames
+    # COOLDOWN_FRAMES = 10    # prevent instant re-trigger
     cooldown_count = 0
     # Init Sign model + extractor
     extractor = HandLandmarkExtractor()
@@ -80,7 +85,9 @@ def main():
         ret, cam_frame = cam.read()
         if not ret:
             continue
-
+        if cooldown_count > 0:
+            cooldown_count -= 1
+        
         # Preprocess frame
         cam_frame = cv2.flip(cam_frame, 1)
         cam_small = cv2.resize(cam_frame, (320, 240))
@@ -99,36 +106,57 @@ def main():
             sequence_buffer.pop(0)
 
         # ---- HARD RESET if hand seen gone ----
+        # if no_hand_count >= UNLOCK_THRESHOLD:
+        #     sequence_buffer.clear()
+        #     live_sign = ""
+        #     locked_sign = ""
+        #     candidate_sign = None
+        #     candidate_count = 0
+        #     status_text = "Waiting..."
+        #     continue
+
         if no_hand_count >= UNLOCK_THRESHOLD:
             sequence_buffer.clear()
+            # prediction_buffer.clear()
             live_sign = ""
-            locked_sign = ""
-            candidate_sign = None
-            candidate_count = 0
+            stable_sign = ""
             status_text = "Waiting..."
-            continue
+            # DO NOT continue — allow frame rendering
 
-        # ---------------- PREDICTION ----------------
-        if len(sequence_buffer) < SEQUENCE_LENGTH:
-            status_text = "Collecting..."
+        if cooldown_count > 0:
+            status_text = "Cooldown..."
             live_sign = ""
         else:
-            seq_np = np.array(sequence_buffer, dtype=np.float32)
-            live_sign = predict_sign(seq_np, model)
-
-            # -------- TEMPORAL LOCK --------
-            if live_sign == candidate_sign:
-                candidate_count += 1
+    
+        # ---------------- PREDICTION ----------------
+            if len(sequence_buffer) < SEQUENCE_LENGTH:
+                status_text = "Collecting..."
+                live_sign = ""
             else:
-                candidate_sign = live_sign
-                candidate_count = 1
+                seq_np = np.array(sequence_buffer, dtype=np.float32)
+                live_sign = predict_sign(seq_np, model)
 
-            if candidate_count >= LOCK_THRESHOLD:
-                locked_sign = candidate_sign
+                # ---------- TEMPORAL LOCK ----------
+            # if cooldown_count > 0:
+            #     cooldown_count -= 1
+            #     status_text = "Cooldown..."
+            if cooldown_count > 0:
+                cooldown_count -= 1
                 status_text = "Sign Stable"
             else:
-                status_text = "Predicting..."
+                if live_sign == candidate_sign:
+                    candidate_count += 1
+                else:
+                    candidate_sign = live_sign
+                    candidate_count = 1
 
+                if candidate_count >= LOCK_THRESHOLD and candidate_count >= MIN_HOLD_FRAMES:
+                    locked_sign = candidate_sign
+                    stable_sign = locked_sign
+                    status_text = "Sign Stable"
+                    cooldown_count = COOLDOWN_FRAMES
+                else:
+                    status_text = "Predicting..."
         # ---------------- GUI ----------------
         FRAME_W, FRAME_H = 720, 420
         frame = np.ones((FRAME_H, FRAME_W, 3), dtype=np.uint8) * 245
