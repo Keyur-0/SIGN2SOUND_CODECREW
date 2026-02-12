@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import queue
 import sys
-from collections import deque, Counter
+from collections import deque
 
 from speech_to_text.vosk_stt import VoskSTT
 from features.hand_landmarks import HandLandmarkExtractor
@@ -11,7 +11,10 @@ from inference.infer import load_model, predict_sign
 # ---------------- CONFIG ----------------
 WINDOW_NAME = "SIGN2SOUND"
 SEQUENCE_LENGTH = 30
-SMOOTHING_WINDOW = 9
+
+# Temporal stability
+LOCK_THRESHOLD = 8        # frames to lock sign
+UNLOCK_THRESHOLD = 5     # frames with no hand to reset
 
 # VOSK STT
 MODEL_PATH = "speech_to_text/models/vosk-model-small-en-us-0.15"
@@ -24,17 +27,17 @@ listening = False
 current_text = ""
 
 sequence_buffer = []
-prediction_buffer = deque(maxlen=SMOOTHING_WINDOW)
 
 live_sign = ""
-stable_sign = ""
+locked_sign = ""
 status_text = "Waiting..."
 
-# Recording (optional / future)
-RECORDING = False
-current_label = None
-recorded_sequences = []
+# Temporal lock state
+candidate_sign = None
+candidate_count = 0
+no_hand_count = 0
 
+# Audio queue (required by Vosk)
 audio_queue = queue.Queue()
 
 
@@ -48,8 +51,8 @@ def audio_callback(indata, frames, time_info, status):
 # ---------------- MAIN ----------------
 def main():
     global running, listening, current_text
-    global live_sign, stable_sign, status_text
-    global RECORDING, current_label
+    global live_sign, locked_sign, status_text
+    global candidate_sign, candidate_count, no_hand_count
 
     # Init STT
     stt = VoskSTT(
@@ -58,7 +61,9 @@ def main():
         device=MIC_DEVICE_INDEX
     )
     stt.start()
-
+    
+    COOLDOWN_FRAMES = 12   # ~0.4 sec at 30 FPS
+    cooldown_count = 0
     # Init Sign model + extractor
     extractor = HandLandmarkExtractor()
     model = load_model()
@@ -72,80 +77,67 @@ def main():
     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
 
     while running:
-        finger_states = None
-
         ret, cam_frame = cam.read()
         if not ret:
             continue
 
-        # Preprocess camera frame
+        # Preprocess frame
         cam_frame = cv2.flip(cam_frame, 1)
-        cam_frame_small = cv2.resize(cam_frame, (320, 240))
+        cam_small = cv2.resize(cam_frame, (320, 240))
 
-        # -------- Feature extraction (126D) --------
-        features = extractor.extract(cam_frame_small)
-        # sequence_buffer.append(features)
-        if np.count_nonzero(features) > 20:  # hand actually detected
-            sequence_buffer.append(features)
+        # ---------------- FEATURE EXTRACTION ----------------
+        features = extractor.extract(cam_small)
+
+        # ---- NO HAND DETECTION ----
+        if np.count_nonzero(features) < 20:
+            no_hand_count += 1
         else:
-            # bad frame → do NOT add noise
-            sequence_buffer.clear()
-            prediction_buffer.clear()
-            live_sign = ""
-            stable_sign = ""
-            status_text = "Waiting..."
+            no_hand_count = 0
+            sequence_buffer.append(features)
 
         if len(sequence_buffer) > SEQUENCE_LENGTH:
             sequence_buffer.pop(0)
 
-        # -------- Prediction logic --------
+        # ---- HARD RESET if hand seen gone ----
+        if no_hand_count >= UNLOCK_THRESHOLD:
+            sequence_buffer.clear()
+            live_sign = ""
+            locked_sign = ""
+            candidate_sign = None
+            candidate_count = 0
+            status_text = "Waiting..."
+            continue
+
+        # ---------------- PREDICTION ----------------
         if len(sequence_buffer) < SEQUENCE_LENGTH:
             status_text = "Collecting..."
             live_sign = ""
-            stable_sign = ""
-            prediction_buffer.clear()
         else:
             seq_np = np.array(sequence_buffer, dtype=np.float32)
             live_sign = predict_sign(seq_np, model)
-            finger_states = extractor.last_finger_states
-            prediction_buffer.append(live_sign)
 
-            most_common, count = Counter(prediction_buffer).most_common(1)[0]
-            if count >= 6:
-                stable_sign = most_common
+            # -------- TEMPORAL LOCK --------
+            if live_sign == candidate_sign:
+                candidate_count += 1
+            else:
+                candidate_sign = live_sign
+                candidate_count = 1
+
+            if candidate_count >= LOCK_THRESHOLD:
+                locked_sign = candidate_sign
                 status_text = "Sign Stable"
             else:
-                stable_sign = ""
                 status_text = "Predicting..."
 
-        if finger_states is not None and live_sign in ["B", "D", "G"]:
-            fs = finger_states.tolist()
-
-            # ISL B: all fingers extended, thumb folded
-            if fs == [0, 1, 1, 1, 1]:
-                live_sign = "B"
-
-            # ISL D: only index finger extended
-            elif fs == [0, 1, 0, 0, 0]:
-                live_sign = "D"
-
-        # -------- Optional recording --------
-        if RECORDING and len(sequence_buffer) == SEQUENCE_LENGTH:
-            recorded_sequences.append(
-                (current_label, np.array(sequence_buffer))
-            )
-            print(f"[RECORDED] Label: {current_label}, Shape: (30, 126)")
-            RECORDING = False
-
-        # -------- GUI CANVAS --------
+        # ---------------- GUI ----------------
         FRAME_W, FRAME_H = 720, 420
         frame = np.ones((FRAME_H, FRAME_W, 3), dtype=np.uint8) * 245
 
         # Webcam placement
         CAM_W, CAM_H = 280, 210
         CAM_X, CAM_Y = 400, 140
-        cam_small = cv2.resize(cam_frame_small, (CAM_W, CAM_H))
-        frame[CAM_Y:CAM_Y + CAM_H, CAM_X:CAM_X + CAM_W] = cam_small
+        cam_disp = cv2.resize(cam_small, (CAM_W, CAM_H))
+        frame[CAM_Y:CAM_Y + CAM_H, CAM_X:CAM_X + CAM_W] = cam_disp
 
         cv2.rectangle(
             frame,
@@ -155,7 +147,7 @@ def main():
             2
         )
 
-        # -------- TEXT --------
+        # ---------------- TEXT ----------------
         cv2.putText(frame, "SIGN2SOUND",
                     (40, 45),
                     cv2.FONT_HERSHEY_SIMPLEX, 1.1, (0, 0, 0), 2)
@@ -164,7 +156,7 @@ def main():
                     (40, 110),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2)
 
-        cv2.putText(frame, stable_sign if stable_sign else "-",
+        cv2.putText(frame, locked_sign if locked_sign else "-",
                     (150, 110),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
 
@@ -176,8 +168,7 @@ def main():
                     (40, 170),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2)
 
-        speech_display = current_text[:32]
-        cv2.putText(frame, f"\"{speech_display}\"",
+        cv2.putText(frame, f"\"{current_text[:32]}\"",
                     (40, 205),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (30, 30, 30), 2)
 
@@ -189,7 +180,7 @@ def main():
                     (150, 265),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 150, 0), 2)
 
-        # -------- CONTROLS --------
+        # ---------------- CONTROLS ----------------
         base_y = FRAME_H - 120
         cv2.putText(frame, "Controls:",
                     (20, base_y),
@@ -199,13 +190,13 @@ def main():
                     (20, base_y + 22),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (60, 60, 60), 2)
 
-        cv2.putText(frame, "R = Record   Q = Quit",
+        cv2.putText(frame, "Q = Quit",
                     (20, base_y + 44),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (60, 60, 60), 2)
 
         cv2.imshow(WINDOW_NAME, frame)
 
-        # -------- KEYS --------
+        # ---------------- KEYS ----------------
         key = cv2.waitKey(1) & 0xFF
         if key == ord("q"):
             running = False
@@ -215,10 +206,6 @@ def main():
         elif key == ord("e"):
             listening = False
             stt.set_listening(False)
-        elif key == ord("r"):
-            RECORDING = True
-            current_label = "test_gesture"
-            sequence_buffer.clear()
 
         if listening:
             current_text = stt.get_text()
@@ -231,4 +218,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
