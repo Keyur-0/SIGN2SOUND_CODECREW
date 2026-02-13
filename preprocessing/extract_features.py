@@ -2,7 +2,7 @@ import numpy as np
 from pathlib import Path
 
 SEQUENCE_LENGTH = 30
-FEATURES_PER_FRAME = 63
+FEATURES_PER_FRAME = 126
 
 DATA_ROOT = Path("data/raw/data")
 
@@ -10,7 +10,9 @@ DATA_ROOT = Path("data/raw/data")
 def load_sample(sample_dir: Path):
     """
     Loads one sample directory (e.g. A/0/)
-    Returns: (30, 63) numpy array
+    Returns: (30, 126) numpy array
+    Feature format:
+    [LEFT_HAND (63) | RIGHT_HAND (63)]
     """
     frame_files = sorted(
         sample_dir.glob("*.npy"),
@@ -19,7 +21,13 @@ def load_sample(sample_dir: Path):
 
     frames = []
     for f in frame_files:
-        frame = np.load(f)[:FEATURES_PER_FRAME]  # (63,)
+        frame = np.load(f)
+
+        if frame.shape[0] != FEATURES_PER_FRAME:
+            raise ValueError(
+                f"Invalid feature size {frame.shape[0]} in {f}, expected {FEATURES_PER_FRAME}"
+            )
+
         frames.append(frame)
 
     if len(frames) == 0:
@@ -30,10 +38,10 @@ def load_sample(sample_dir: Path):
     # Pad to 30 frames if needed
     if frames.shape[0] < SEQUENCE_LENGTH:
         pad_count = SEQUENCE_LENGTH - frames.shape[0]
-        pad_frames = np.repeat(frames[-1][None, :], pad_count, axis=0)
+        pad_frames = np.zeros((pad_count, FEATURES_PER_FRAME), dtype=np.float32)
         frames = np.vstack([frames, pad_frames])
 
-    return frames  # (30, 63)
+    return frames  # (30, 126)
 
 
 def load_dataset():
@@ -64,3 +72,4 @@ if __name__ == "__main__":
     print("y shape:", y.shape)
     print("Labels:", labels[:5])
     print("One sample shape:", X[0].shape)
+    

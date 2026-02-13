@@ -10,7 +10,7 @@ from training.callbacks import ModelCheckpoint
 
 import json
 import os
-
+import time
 # 1. Configuration
 BATCH_SIZE = 32
 EPOCHS = 40
@@ -26,6 +26,8 @@ val_accs = []
 os.makedirs("results", exist_ok=True)
 log_file = open("results/training_log.txt", "w")
 
+torch.manual_seed(42)
+
 print("Using device:", DEVICE)
 
 
@@ -33,9 +35,6 @@ print("Using device:", DEVICE)
 # Load dataset
 X, y, labels = load_dataset()
 
-# Encode labels
-y_encoded, class_to_idx, idx_to_class = encode_labels(y)
-num_classes = len(class_to_idx)
 
 print("Total samples:", X.shape[0])
 
@@ -70,18 +69,22 @@ val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE)
 
 # 6. Model, loss, optimizer
 model = SignLSTM(
-    input_size=63,
+    input_size=126,
     hidden_size=256,
     num_classes=num_classes
 ).to(DEVICE)
 
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-checkpoint = ModelCheckpoint("checkpoints/best_model.pth")
+# checkpoint = ModelCheckpoint("checkpoints/best_model.pth")
+checkpoint = ModelCheckpoint(
+    "checkpoints/best_model_2hand.pth"
+)
 
-
+start_time = time.time()
 # 7. Training loop
 for epoch in range(EPOCHS):
+    epoch_start = time.time()
     model.train()
     train_loss = 0.0
     correct = 0
@@ -148,10 +151,24 @@ for epoch in range(EPOCHS):
     train_accs.append(train_acc)
     val_accs.append(val_acc)
 
-
+    epoch_time = time.time() - epoch_start
+    print(f"Epoch time: {epoch_time:.2f} seconds")
+    log_file.write(f"Epoch time: {epoch_time:.2f} seconds\n")
 # 8. Save model
 
-torch.save(model.state_dict(), "checkpoints/final_model.pth")
+total_time = time.time() - start_time
+avg_epoch_time = total_time / EPOCHS
+
+print(f"Total training time: {total_time:.2f} seconds")
+print(f"Average time per epoch: {avg_epoch_time:.2f} seconds")
+
+log_file.write(f"\nTotal training time: {total_time:.2f} seconds\n")
+log_file.write(f"Average time per epoch: {avg_epoch_time:.2f} seconds\n")
+# torch.save(model.state_dict(), "checkpoints/final_model.pth")
+torch.save(
+    model.state_dict(),
+    "checkpoints/final_model_2hand.pth"
+)
 print("Model saved to checkpoints/sign_lstm.pth")
 
 

@@ -5,7 +5,7 @@ from torch.utils.data import Dataset
 class SignDataset(Dataset):
     """
     PyTorch Dataset for sign language sequences
-    X shape: (N, 30, 63)
+    X shape: (N, 30, 126)
     y shape: (N,)
     """
 

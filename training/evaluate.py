@@ -13,7 +13,8 @@ from models.model import SignLSTM
 # Config
 # -------------------------------
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-MODEL_PATH = "checkpoints/final_model.pth"
+# MODEL_PATH = "checkpoints/final_model.pth"
+MODEL_PATH = "checkpoints/final_model_2hand.pth"
 os.makedirs("results", exist_ok=True)
 
 # -------------------------------
@@ -38,7 +39,7 @@ y_test = y_encoded[test_idx]
 # Load model
 # -------------------------------
 model = SignLSTM(
-    input_size=63,
+    input_size=126,
     hidden_size=256,
     num_classes=len(class_to_idx)
 ).to(DEVICE)
@@ -52,7 +53,7 @@ y_pred = []
 
 with torch.no_grad():
     for i in range(len(X_test)):
-        x = torch.tensor(X_test[i], dtype=torch.float32).unsqueeze(0).to(DEVICE)  # (1, T, 63)
+        x = torch.tensor(X_test[i], dtype=torch.float32).unsqueeze(0).to(DEVICE)  # (1, T, 126)
         output = model(x)
         pred = torch.argmax(output, dim=1).item()
 
