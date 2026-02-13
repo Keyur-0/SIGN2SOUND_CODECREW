@@ -2,20 +2,38 @@ import cv2
 import numpy as np
 import queue
 import sys
-from collections import deque
 
 from speech_to_text.vosk_stt import VoskSTT
 from features.hand_landmarks import HandLandmarkExtractor
 from inference.infer import load_model, predict_sign
+from sign_to_speech.tts import SignToSpeech
 
+# def highlight_keywords(text: str):
+#     """
+#     Returns (clean_text, has_important)
+#     """
+#     text_lower = text.lower()
+#     has_important = any(word in text_lower for word in IMPORTANT_WORDS)
+#     return text, has_important
+def split_important_words(text: str):
+    words = text.split()
+    important_indices = []
+
+    for i, w in enumerate(words):
+        clean = w.lower().strip(".,!?")
+        if clean in IMPORTANT_WORDS:
+            important_indices.append(i)
+
+    return words, important_indices
 # ---------------- CONFIG ----------------
 WINDOW_NAME = "SIGN2SOUND"
 SEQUENCE_LENGTH = 30
 
-# Temporal stability
-# LOCK_THRESHOLD = 8  
-LOCK_THRESHOLD = 10       # frames to lock sign
-UNLOCK_THRESHOLD = 5     # frames with no hand to reset
+LOCK_THRESHOLD = 14        # frames to lock sign
+MIN_HOLD_FRAMES = 8        # minimum same-sign frames
+COOLDOWN_FRAMES = 15       # pause after lock
+UNLOCK_THRESHOLD = 7       # no-hand reset
+IDLE_FRAMES = 25           # auto speak trigger
 
 # VOSK STT
 MODEL_PATH = "speech_to_text/models/vosk-model-small-en-us-0.15"
@@ -29,31 +47,35 @@ current_text = ""
 
 sequence_buffer = []
 
+IMPORTANT_WORDS = ["important", "urgent", "understand", "deadline"]
+
 live_sign = ""
 locked_sign = ""
 status_text = "Waiting..."
 
-# Temporal lock state
 candidate_sign = None
 candidate_count = 0
+cooldown_count = 0
 no_hand_count = 0
+idle_count = 0
 
-# Audio queue (required by Vosk)
+# Sign → Speech
+word_buffer = ""
+has_appended_current_lock = False
+
 audio_queue = queue.Queue()
-
-
-# ---------------- AUDIO CALLBACK ----------------
-def audio_callback(indata, frames, time_info, status):
-    if status:
-        print(status, file=sys.stderr)
-    audio_queue.put(bytes(indata))
 
 
 # ---------------- MAIN ----------------
 def main():
     global running, listening, current_text
     global live_sign, locked_sign, status_text
-    global candidate_sign, candidate_count, no_hand_count
+    global candidate_sign, candidate_count
+    global cooldown_count, no_hand_count, idle_count
+    global word_buffer, has_appended_current_lock
+
+    last_stt_text = ""
+    tts = SignToSpeech(rate=180)
 
     # Init STT
     stt = VoskSTT(
@@ -62,19 +84,10 @@ def main():
         device=MIC_DEVICE_INDEX
     )
     stt.start()
-    
-    COOLDOWN_FRAMES = 12
-    cooldown_count = 0
 
-    MIN_HOLD_FRAMES = 6      # must hold same sign this many frames
-    # COOLDOWN_FRAMES = 10    # prevent instant re-trigger
-    cooldown_count = 0
-    # Init Sign model + extractor
     extractor = HandLandmarkExtractor()
     model = load_model()
 
-    # Open webcam
-    print("[INFO] Opening webcam...")
     cam = cv2.VideoCapture(0)
     if not cam.isOpened():
         raise RuntimeError("Could not open webcam")
@@ -85,83 +98,89 @@ def main():
         ret, cam_frame = cam.read()
         if not ret:
             continue
+
         if cooldown_count > 0:
             cooldown_count -= 1
-        
-        # Preprocess frame
+
         cam_frame = cv2.flip(cam_frame, 1)
         cam_small = cv2.resize(cam_frame, (320, 240))
 
         # ---------------- FEATURE EXTRACTION ----------------
         features = extractor.extract(cam_small)
 
-        # ---- NO HAND DETECTION ----
+        # -------- NO HAND + IDLE DETECTION --------
         if np.count_nonzero(features) < 20:
             no_hand_count += 1
+            idle_count += 1
         else:
             no_hand_count = 0
+            idle_count = 0
             sequence_buffer.append(features)
 
         if len(sequence_buffer) > SEQUENCE_LENGTH:
             sequence_buffer.pop(0)
 
-        # ---- HARD RESET if hand seen gone ----
-        # if no_hand_count >= UNLOCK_THRESHOLD:
-        #     sequence_buffer.clear()
-        #     live_sign = ""
-        #     locked_sign = ""
-        #     candidate_sign = None
-        #     candidate_count = 0
-        #     status_text = "Waiting..."
-        #     continue
-
+        # ---------------- HARD RESET ----------------
         if no_hand_count >= UNLOCK_THRESHOLD:
             sequence_buffer.clear()
-            # prediction_buffer.clear()
             live_sign = ""
-            stable_sign = ""
+            locked_sign = ""
+            candidate_sign = None
+            candidate_count = 0
+            cooldown_count = 0
             status_text = "Waiting..."
-            # DO NOT continue — allow frame rendering
+            has_appended_current_lock = False
 
-        if cooldown_count > 0:
-            status_text = "Cooldown..."
+        # ---------------- PREDICTION ----------------
+        if len(sequence_buffer) < SEQUENCE_LENGTH:
+            status_text = "Collecting..."
             live_sign = ""
         else:
-    
-        # ---------------- PREDICTION ----------------
-            if len(sequence_buffer) < SEQUENCE_LENGTH:
-                status_text = "Collecting..."
-                live_sign = ""
-            else:
-                seq_np = np.array(sequence_buffer, dtype=np.float32)
-                live_sign = predict_sign(seq_np, model)
+            seq_np = np.array(sequence_buffer, dtype=np.float32)
+            live_sign = predict_sign(seq_np, model)
 
-                # ---------- TEMPORAL LOCK ----------
-            # if cooldown_count > 0:
-            #     cooldown_count -= 1
-            #     status_text = "Cooldown..."
-            if cooldown_count > 0:
-                cooldown_count -= 1
+            # candidate tracking ALWAYS runs
+            if live_sign == candidate_sign:
+                candidate_count += 1
+            else:
+                candidate_sign = live_sign
+                candidate_count = 1
+
+            if (
+                candidate_count >= LOCK_THRESHOLD
+                and candidate_count >= MIN_HOLD_FRAMES
+                and cooldown_count == 0
+            ):
+                locked_sign = candidate_sign
                 status_text = "Sign Stable"
-            else:
-                if live_sign == candidate_sign:
-                    candidate_count += 1
-                else:
-                    candidate_sign = live_sign
-                    candidate_count = 1
+                cooldown_count = COOLDOWN_FRAMES
 
-                if candidate_count >= LOCK_THRESHOLD and candidate_count >= MIN_HOLD_FRAMES:
-                    locked_sign = candidate_sign
-                    stable_sign = locked_sign
-                    status_text = "Sign Stable"
-                    cooldown_count = COOLDOWN_FRAMES
-                else:
-                    status_text = "Predicting..."
+                if not has_appended_current_lock:
+                    word_buffer += locked_sign
+                    has_appended_current_lock = True
+
+            elif cooldown_count > 0:
+                status_text = "Cooldown..."
+            else:
+                status_text = "Predicting..."
+
+        # -------- AUTO SPEAK ON IDLE --------
+        if idle_count >= IDLE_FRAMES and word_buffer:
+            print(f"[AUTO TTS] Speaking: {word_buffer}")
+            tts.speak(word_buffer)
+
+            word_buffer = ""
+            has_appended_current_lock = False
+            candidate_sign = None
+            candidate_count = 0
+            locked_sign = ""
+            status_text = "Waiting..."
+            idle_count = 0
+
         # ---------------- GUI ----------------
         FRAME_W, FRAME_H = 720, 420
         frame = np.ones((FRAME_H, FRAME_W, 3), dtype=np.uint8) * 245
 
-        # Webcam placement
         CAM_W, CAM_H = 280, 210
         CAM_X, CAM_Y = 400, 140
         cam_disp = cv2.resize(cam_small, (CAM_W, CAM_H))
@@ -175,13 +194,10 @@ def main():
             2
         )
 
-        # ---------------- TEXT ----------------
-        cv2.putText(frame, "SIGN2SOUND",
-                    (40, 45),
+        cv2.putText(frame, "SIGN2SOUND", (40, 45),
                     cv2.FONT_HERSHEY_SIMPLEX, 1.1, (0, 0, 0), 2)
 
-        cv2.putText(frame, "SIGN:",
-                    (40, 110),
+        cv2.putText(frame, "SIGN:", (40, 110),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2)
 
         cv2.putText(frame, locked_sign if locked_sign else "-",
@@ -192,35 +208,61 @@ def main():
                     (40, 135),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.65, (80, 80, 80), 2)
 
-        cv2.putText(frame, "Speech:",
-                    (40, 170),
+        cv2.putText(frame, "Speech:", (40, 170),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2)
 
-        cv2.putText(frame, f"\"{current_text[:32]}\"",
-                    (40, 205),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (30, 30, 30), 2)
+        # cv2.putText(frame, f"\"{current_text[:32]}\"",
+        #             (40, 205),
+        #             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (30, 30, 30), 2)
 
-        cv2.putText(frame, "Status:",
-                    (40, 265),
+        words, important_idxs = split_important_words(current_text)
+
+        x, y = 40, 205
+        space = 10
+
+        for i, word in enumerate(words):
+            color = (0, 0, 255) if i in important_idxs else (30, 30, 30)
+
+            (w, h), _ = cv2.getTextSize(
+                word,
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                2
+            )
+
+            cv2.putText(
+                frame,
+                word,
+                (x, y),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                color,
+                2
+            )
+
+            x += w + space
+
+            if important_idxs:
+                cv2.putText(
+                    frame,
+                    "[IMPORTANT]",
+                    (40, 235),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    (0, 0, 255),
+                    2
+                )
+
+        cv2.putText(frame, "Status:", (40, 265),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2)
 
         cv2.putText(frame, status_text,
                     (150, 265),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 150, 0), 2)
 
-        # ---------------- CONTROLS ----------------
-        base_y = FRAME_H - 120
-        cv2.putText(frame, "Controls:",
-                    (20, base_y),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
-
-        cv2.putText(frame, "S = STT Start   E = STT Stop",
-                    (20, base_y + 22),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (60, 60, 60), 2)
-
-        cv2.putText(frame, "Q = Quit",
-                    (20, base_y + 44),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (60, 60, 60), 2)
+        cv2.putText(frame, f"Word: {word_buffer if word_buffer else '-'}",
+                    (40, 300),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 0), 2)
 
         cv2.imshow(WINDOW_NAME, frame)
 
@@ -234,11 +276,20 @@ def main():
         elif key == ord("e"):
             listening = False
             stt.set_listening(False)
+        elif key == 32:  # SPACE = manual speak
+            if word_buffer:
+                tts.speak(word_buffer)
+                word_buffer = ""
+                has_appended_current_lock = False
 
+        # if listening:
+        #     current_text = stt.get_text()
         if listening:
-            current_text = stt.get_text()
+            new_text = stt.get_text()
+            if new_text and new_text != last_stt_text:
+                current_text = new_text
+                last_stt_text = new_text
 
-    # Cleanup
     stt.stop()
     cam.release()
     cv2.destroyAllWindows()

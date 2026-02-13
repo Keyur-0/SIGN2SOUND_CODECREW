@@ -83,3 +83,19 @@ class VoskSTT:
     def get_text(self):
         return self.current_text
 # End of vosk_stt.py
+if __name__ == "__main__":
+    stt = VoskSTT()
+    stt.start()
+    stt.set_listening(True)
+    print("Listening... Speak into the microphone.")
+
+    try:
+        while True:
+            time.sleep(5)
+            text = stt.get_text()
+            if text:
+                print("Recognized Text:", text)
+    except KeyboardInterrupt:
+        print("Stopping...")
+    finally:
+        stt.stop()
