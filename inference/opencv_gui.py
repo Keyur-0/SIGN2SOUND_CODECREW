@@ -96,7 +96,7 @@ def draw_stt_overlay(text: str):
         clean = word.lower().strip(".,!?")
 
         if clean in IMPORTANT_WORDS:
-            label = f"[!] {word}"
+            label = f"[!]{word}"
             color = (0, 0, 255)
         else:
             label = word
@@ -113,14 +113,30 @@ def draw_stt_overlay(text: str):
 
         x += w + space
 
-    cv2.imshow(STT_WINDOW_NAME, frame)# ---------------- MAIN ----------------
+    cv2.imshow(STT_WINDOW_NAME, frame)
+def speak_key_response(key, tts):
+    key_map = {
+        ord('y'): "Yes",
+        ord('n'): "No",
+        ord('o'): "Okay",
+        ord('h'): "Hello",
+        ord('t'): "Thank you"
+    }
+
+    if key in key_map:
+        tts.speak(key_map[key])
+        return key_map[key]
+
+    return None
+    # ---------------- MAIN ----------------
 def main():
     global running, listening, current_text
     global live_sign, locked_sign, status_text
     global candidate_sign, candidate_count
     global cooldown_count, no_hand_count, idle_count
     global word_buffer, has_appended_current_lock
-
+    
+    keyboard_demo_active = False
     last_stt_text = ""
     tts = SignToSpeech(rate=180)
 
@@ -218,9 +234,13 @@ def main():
                 status_text = "Predicting..."
 
         # ---------------- AUTO SPEAK ON IDLE ----------------
-        if idle_count >= IDLE_FRAMES and word_buffer:
+        # if idle_count >= IDLE_FRAMES and word_buffer:
+        #     tts.speak(word_buffer)
+        if idle_count >= IDLE_FRAMES and word_buffer and not keyboard_demo_active:
             tts.speak(word_buffer)
-
+            
+            keyboard_demo_active = False
+            
             word_buffer = ""
             has_appended_current_lock = False
             candidate_sign = None
@@ -249,84 +269,90 @@ def main():
         )
 
         # ---------------- TEXT ----------------
-        cv2.putText(frame, "SIGN2SOUND", (40, 45),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.1, (0, 0, 0), 2)
+        # ---------------- CLEAN MAIN UI ----------------
+        FRAME_W, FRAME_H = 720, 420
+        frame = np.ones((FRAME_H, FRAME_W, 3), dtype=np.uint8) * 245
 
-        cv2.putText(frame, "SIGN:", (40, 110),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2)
+        # ---------- TITLE ----------
+        cv2.putText(
+            frame,
+            "SIGN2SOUND",
+            (30, 40),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1.1,
+            (0, 0, 0),
+            2
+        )
+        cv2.line(frame, (30, 50), (FRAME_W - 30, 50), (0, 0, 0), 1)
 
-        cv2.putText(frame, locked_sign if locked_sign else "-",
-                    (150, 110),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+        # ---------- INFO BLOCK ----------
+        label_x = 40
+        value_x = 180
+        y = 95
+        row_gap = 45
 
-        cv2.putText(frame, f"Predicting: {live_sign}",
-                    (40, 135),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.65, (80, 80, 80), 2)
+        def draw_row(label, value, y, value_color=(0, 0, 0), scale=0.9):
+            cv2.putText(
+                frame, label, (label_x, y),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2
+            )
+            cv2.putText(
+                frame, value, (value_x, y),
+                cv2.FONT_HERSHEY_SIMPLEX, scale, value_color, 2
+            )
 
-        # cv2.putText(frame, "Speech:", (40, 170),
-        #             cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2)
+        # WORD (primary output)
+        draw_row(
+            "WORD:",
+            word_buffer if word_buffer else "-",
+            y,
+            value_color=(0, 0, 255),
+            scale=1.0
+        )
+        y += row_gap
 
-        # words, important_idxs = split_important_words(current_text)
-        # # x, y = 40, 205
+        # SIGN
+        draw_row(
+            "SIGN:",
+            locked_sign if locked_sign else "-",
+            y
+        )
+        y += row_gap
 
-        # # for i, word in enumerate(words):
-        # #     color = (0, 0, 255) if i in important_idxs else (30, 30, 30)
-        # #     (w, _), _ = cv2.getTextSize(word, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)
-        # #     cv2.putText(frame, word, (x, y),
-        # #                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
-        # #     x += w + 10
+        # PREDICTING
+        draw_row(
+            "Predicting:",
+            live_sign if live_sign else "-",
+            y,
+            value_color=(80, 80, 80),
+            scale=0.8
+        )
+        y += row_gap
 
-        # x, y = 40, 205
-        # font = cv2.FONT_HERSHEY_SIMPLEX
-        # scale = 0.7
-        # thickness = 2
-        # space = 10
+        # STATUS
+        status_color = (0, 150, 0) if status_text == "Sign Stable" else (0, 120, 200)
+        draw_row(
+            "Status:",
+            status_text,
+            y,
+            value_color=status_color
+        )
 
-        # words = current_text.split()
+        # ---------- WEBCAM (BOTTOM RIGHT) ----------
+        CAM_W, CAM_H = 300, 220
+        CAM_X = FRAME_W - CAM_W - 30
+        CAM_Y = FRAME_H - CAM_H - 30
 
-        # for word in words:
-        #     clean = word.lower().strip(".,!?")
+        cam_disp = cv2.resize(cam_small, (CAM_W, CAM_H))
+        frame[CAM_Y:CAM_Y + CAM_H, CAM_X:CAM_X + CAM_W] = cam_disp
 
-        #     # if clean in IMPORTANT_WORDS:
-        #     #     label = "[!]important"
-        #     #     color = (0, 0, 255)
-        #     # else:
-        #     #     label = word
-        #     #     color = (30, 30, 30)
-        #     if clean in IMPORTANT_WORDS:
-        #         label = f"[!]{word}"
-        #         color = (0, 0, 255)
-        #     else:
-        #         label = word
-        #         color = (30, 30, 30)
-
-        #     (w, _), _ = cv2.getTextSize(label, font, scale, thickness)
-
-        #     cv2.putText(
-        #         frame,
-        #         label,
-        #         (x, y),
-        #         font,
-        #         scale,
-        #         color,
-        #         thickness
-        #     )
-
-        #     x += w + space
-
-        # if important_idxs:
-        #     cv2.putText(frame, "[IMPORTANT]", (40, 235),
-        #                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-
-        cv2.putText(frame, "Status:", (40, 265),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2)
-
-        cv2.putText(frame, status_text, (150, 265),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 150, 0), 2)
-
-        cv2.putText(frame, f"Word: {word_buffer if word_buffer else '-'}",
-                    (40, 300),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 0), 2)
+        cv2.rectangle(
+            frame,
+            (CAM_X - 2, CAM_Y - 2),
+            (CAM_X + CAM_W + 2, CAM_Y + CAM_H + 2),
+            (0, 0, 0),
+            2
+        )
 
         cv2.imshow(WINDOW_NAME, frame)
 
@@ -344,6 +370,21 @@ def main():
             tts.speak(word_buffer)
             word_buffer = ""
             has_appended_current_lock = False
+        
+       # -------- KEYBOARD DEMO (HARD LOCK) --------
+        elif key != 255:
+            spoken = speak_key_response(key, tts)
+            if spoken:
+                word_buffer = spoken.upper()
+                keyboard_demo_active = True   # ⬅ mark source
+
+            # 🔒 wait for key release
+            while True:
+                if cv2.waitKey(1) & 0xFF == 255:
+                    break
+
+            # keyboard_demo_active = False
+            
 
         if listening:
             new_text = stt.get_text()
