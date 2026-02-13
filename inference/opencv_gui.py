@@ -8,32 +8,17 @@ from features.hand_landmarks import HandLandmarkExtractor
 from inference.infer import load_model, predict_sign
 from sign_to_speech.tts import SignToSpeech
 
-# def highlight_keywords(text: str):
-#     """
-#     Returns (clean_text, has_important)
-#     """
-#     text_lower = text.lower()
-#     has_important = any(word in text_lower for word in IMPORTANT_WORDS)
-#     return text, has_important
-def split_important_words(text: str):
-    words = text.split()
-    important_indices = []
-
-    for i, w in enumerate(words):
-        clean = w.lower().strip(".,!?")
-        if clean in IMPORTANT_WORDS:
-            important_indices.append(i)
-
-    return words, important_indices
 # ---------------- CONFIG ----------------
 WINDOW_NAME = "SIGN2SOUND"
 SEQUENCE_LENGTH = 30
 
-LOCK_THRESHOLD = 14        # frames to lock sign
-MIN_HOLD_FRAMES = 8        # minimum same-sign frames
-COOLDOWN_FRAMES = 15       # pause after lock
-UNLOCK_THRESHOLD = 7       # no-hand reset
-IDLE_FRAMES = 25           # auto speak trigger
+LOCK_THRESHOLD = 14
+MIN_HOLD_FRAMES = 8
+COOLDOWN_FRAMES = 15
+UNLOCK_THRESHOLD = 7
+IDLE_FRAMES = 25
+
+IMPORTANT_WORDS = ["important", "urgent", "understand", "deadline"]
 
 # VOSK STT
 MODEL_PATH = "speech_to_text/models/vosk-model-small-en-us-0.15"
@@ -46,8 +31,6 @@ listening = False
 current_text = ""
 
 sequence_buffer = []
-
-IMPORTANT_WORDS = ["important", "urgent", "understand", "deadline"]
 
 live_sign = ""
 locked_sign = ""
@@ -64,6 +47,19 @@ word_buffer = ""
 has_appended_current_lock = False
 
 audio_queue = queue.Queue()
+
+
+# ---------------- HELPERS ----------------
+def split_important_words(text: str):
+    words = text.split()
+    important_indices = []
+
+    for i, w in enumerate(words):
+        clean = w.lower().strip(".,!?")
+        if clean in IMPORTANT_WORDS:
+            important_indices.append(i)
+
+    return words, important_indices
 
 
 # ---------------- MAIN ----------------
@@ -108,7 +104,6 @@ def main():
         # ---------------- FEATURE EXTRACTION ----------------
         features = extractor.extract(cam_small)
 
-        # -------- NO HAND + IDLE DETECTION --------
         if np.count_nonzero(features) < 20:
             no_hand_count += 1
             idle_count += 1
@@ -139,7 +134,6 @@ def main():
             seq_np = np.array(sequence_buffer, dtype=np.float32)
             live_sign = predict_sign(seq_np, model)
 
-            # candidate tracking ALWAYS runs
             if live_sign == candidate_sign:
                 candidate_count += 1
             else:
@@ -164,9 +158,8 @@ def main():
             else:
                 status_text = "Predicting..."
 
-        # -------- AUTO SPEAK ON IDLE --------
+        # ---------------- AUTO SPEAK ON IDLE ----------------
         if idle_count >= IDLE_FRAMES and word_buffer:
-            print(f"[AUTO TTS] Speaking: {word_buffer}")
             tts.speak(word_buffer)
 
             word_buffer = ""
@@ -194,6 +187,7 @@ def main():
             2
         )
 
+        # ---------------- TEXT ----------------
         cv2.putText(frame, "SIGN2SOUND", (40, 45),
                     cv2.FONT_HERSHEY_SIMPLEX, 1.1, (0, 0, 0), 2)
 
@@ -211,53 +205,56 @@ def main():
         cv2.putText(frame, "Speech:", (40, 170),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2)
 
-        # cv2.putText(frame, f"\"{current_text[:32]}\"",
-        #             (40, 205),
-        #             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (30, 30, 30), 2)
-
         words, important_idxs = split_important_words(current_text)
+        # x, y = 40, 205
+
+        # for i, word in enumerate(words):
+        #     color = (0, 0, 255) if i in important_idxs else (30, 30, 30)
+        #     (w, _), _ = cv2.getTextSize(word, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)
+        #     cv2.putText(frame, word, (x, y),
+        #                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+        #     x += w + 10
 
         x, y = 40, 205
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        scale = 0.7
+        thickness = 2
         space = 10
 
-        for i, word in enumerate(words):
-            color = (0, 0, 255) if i in important_idxs else (30, 30, 30)
+        words = current_text.split()
 
-            (w, h), _ = cv2.getTextSize(
-                word,
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                2
-            )
+        for word in words:
+            clean = word.lower().strip(".,!?")
+
+            if clean in IMPORTANT_WORDS:
+                label = "[!]important"
+                color = (0, 0, 255)
+            else:
+                label = word
+                color = (30, 30, 30)
+
+            (w, _), _ = cv2.getTextSize(label, font, scale, thickness)
 
             cv2.putText(
                 frame,
-                word,
+                label,
                 (x, y),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
+                font,
+                scale,
                 color,
-                2
+                thickness
             )
 
             x += w + space
 
-            if important_idxs:
-                cv2.putText(
-                    frame,
-                    "[IMPORTANT]",
-                    (40, 235),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,
-                    (0, 0, 255),
-                    2
-                )
+        if important_idxs:
+            cv2.putText(frame, "[IMPORTANT]", (40, 235),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
 
         cv2.putText(frame, "Status:", (40, 265),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2)
 
-        cv2.putText(frame, status_text,
-                    (150, 265),
+        cv2.putText(frame, status_text, (150, 265),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 150, 0), 2)
 
         cv2.putText(frame, f"Word: {word_buffer if word_buffer else '-'}",
@@ -276,14 +273,11 @@ def main():
         elif key == ord("e"):
             listening = False
             stt.set_listening(False)
-        elif key == 32:  # SPACE = manual speak
-            if word_buffer:
-                tts.speak(word_buffer)
-                word_buffer = ""
-                has_appended_current_lock = False
+        elif key == 32 and word_buffer:
+            tts.speak(word_buffer)
+            word_buffer = ""
+            has_appended_current_lock = False
 
-        # if listening:
-        #     current_text = stt.get_text()
         if listening:
             new_text = stt.get_text()
             if new_text and new_text != last_stt_text:
