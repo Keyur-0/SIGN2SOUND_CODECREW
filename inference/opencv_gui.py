@@ -12,6 +12,10 @@ from sign_to_speech.tts import SignToSpeech
 WINDOW_NAME = "SIGN2SOUND"
 SEQUENCE_LENGTH = 30
 
+STT_WINDOW_NAME = "Live Captions"
+STT_WIDTH = 420
+STT_HEIGHT = 140
+
 LOCK_THRESHOLD = 14
 MIN_HOLD_FRAMES = 8
 COOLDOWN_FRAMES = 15
@@ -61,8 +65,55 @@ def split_important_words(text: str):
 
     return words, important_indices
 
+def draw_stt_overlay(text: str):
+    frame = np.ones((STT_HEIGHT, STT_WIDTH, 3), dtype=np.uint8) * 250
 
-# ---------------- MAIN ----------------
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    scale = 0.6
+    thickness = 2
+
+    # ---- LABEL ----
+    cv2.putText(
+        frame,
+        "Speech-to-Text",
+        (10, 25),
+        font,
+        0.7,
+        (0, 0, 0),
+        2
+    )
+
+    # underline
+    cv2.line(frame, (10, 30), (STT_WIDTH - 10, 30), (0, 0, 0), 1)
+
+    x, y = 10, 55
+    space = 8
+    line_height = 22
+
+    words = text.split()
+
+    for word in words:
+        clean = word.lower().strip(".,!?")
+
+        if clean in IMPORTANT_WORDS:
+            label = f"[!] {word}"
+            color = (0, 0, 255)
+        else:
+            label = word
+            color = (40, 40, 40)
+
+        (w, h), _ = cv2.getTextSize(label, font, scale, thickness)
+
+        if x + w > STT_WIDTH - 10:
+            x = 10
+            y += line_height
+
+        cv2.putText(frame, label, (x, y),
+                    font, scale, color, thickness)
+
+        x += w + space
+
+    cv2.imshow(STT_WINDOW_NAME, frame)# ---------------- MAIN ----------------
 def main():
     global running, listening, current_text
     global live_sign, locked_sign, status_text
@@ -89,6 +140,14 @@ def main():
         raise RuntimeError("Could not open webcam")
 
     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
+    cv2.namedWindow(STT_WINDOW_NAME, cv2.WINDOW_NORMAL)
+
+    cv2.resizeWindow(STT_WINDOW_NAME, STT_WIDTH, STT_HEIGHT)
+    cv2.setWindowProperty(
+        STT_WINDOW_NAME,
+        cv2.WND_PROP_TOPMOST,
+        1
+    )
 
     while running:
         ret, cam_frame = cam.read()
@@ -179,6 +238,8 @@ def main():
         cam_disp = cv2.resize(cam_small, (CAM_W, CAM_H))
         frame[CAM_Y:CAM_Y + CAM_H, CAM_X:CAM_X + CAM_W] = cam_disp
 
+        draw_stt_overlay(current_text)
+
         cv2.rectangle(
             frame,
             (CAM_X - 2, CAM_Y - 2),
@@ -202,54 +263,60 @@ def main():
                     (40, 135),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.65, (80, 80, 80), 2)
 
-        cv2.putText(frame, "Speech:", (40, 170),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2)
+        # cv2.putText(frame, "Speech:", (40, 170),
+        #             cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2)
 
-        words, important_idxs = split_important_words(current_text)
+        # words, important_idxs = split_important_words(current_text)
+        # # x, y = 40, 205
+
+        # # for i, word in enumerate(words):
+        # #     color = (0, 0, 255) if i in important_idxs else (30, 30, 30)
+        # #     (w, _), _ = cv2.getTextSize(word, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)
+        # #     cv2.putText(frame, word, (x, y),
+        # #                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+        # #     x += w + 10
+
         # x, y = 40, 205
+        # font = cv2.FONT_HERSHEY_SIMPLEX
+        # scale = 0.7
+        # thickness = 2
+        # space = 10
 
-        # for i, word in enumerate(words):
-        #     color = (0, 0, 255) if i in important_idxs else (30, 30, 30)
-        #     (w, _), _ = cv2.getTextSize(word, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)
-        #     cv2.putText(frame, word, (x, y),
-        #                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
-        #     x += w + 10
+        # words = current_text.split()
 
-        x, y = 40, 205
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        scale = 0.7
-        thickness = 2
-        space = 10
+        # for word in words:
+        #     clean = word.lower().strip(".,!?")
 
-        words = current_text.split()
+        #     # if clean in IMPORTANT_WORDS:
+        #     #     label = "[!]important"
+        #     #     color = (0, 0, 255)
+        #     # else:
+        #     #     label = word
+        #     #     color = (30, 30, 30)
+        #     if clean in IMPORTANT_WORDS:
+        #         label = f"[!]{word}"
+        #         color = (0, 0, 255)
+        #     else:
+        #         label = word
+        #         color = (30, 30, 30)
 
-        for word in words:
-            clean = word.lower().strip(".,!?")
+        #     (w, _), _ = cv2.getTextSize(label, font, scale, thickness)
 
-            if clean in IMPORTANT_WORDS:
-                label = "[!]important"
-                color = (0, 0, 255)
-            else:
-                label = word
-                color = (30, 30, 30)
+        #     cv2.putText(
+        #         frame,
+        #         label,
+        #         (x, y),
+        #         font,
+        #         scale,
+        #         color,
+        #         thickness
+        #     )
 
-            (w, _), _ = cv2.getTextSize(label, font, scale, thickness)
+        #     x += w + space
 
-            cv2.putText(
-                frame,
-                label,
-                (x, y),
-                font,
-                scale,
-                color,
-                thickness
-            )
-
-            x += w + space
-
-        if important_idxs:
-            cv2.putText(frame, "[IMPORTANT]", (40, 235),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+        # if important_idxs:
+        #     cv2.putText(frame, "[IMPORTANT]", (40, 235),
+        #                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
 
         cv2.putText(frame, "Status:", (40, 265),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2)
